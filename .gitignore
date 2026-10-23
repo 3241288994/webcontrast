@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+.env
+.env.*
+output/
+private/
+*.jsonl
+*.jsonl.gz
+*.pdf
+*.zip
+*.pem
+*.key

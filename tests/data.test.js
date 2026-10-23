@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {parsePages,explanationFor,readLocalFile} from '../docs/assets/data.js';
+const source=readFileSync(new URL('../docs/data/illustrations.json',import.meta.url),'utf8');
+const rows=parsePages(source);
+test('three independent illustrations, including reversed goal labels',()=>{assert.equal(rows.length,3);assert.deepEqual(rows[2].correct_action_indices,[1,0]);});
+test('explanations stay with their action under version changes',()=>{const r=rows[0];assert.equal(explanationFor(r,0,'v1'),r.notes[0].texts.phrasing1);assert.equal(explanationFor(r,1,'v1'),r.notes[1].texts.phrasing2);assert.equal(explanationFor(r,0,'v2'),r.notes[0].texts.phrasing2);assert.equal(explanationFor(r,1,'v2'),r.notes[1].texts.phrasing1);assert.equal(explanationFor(r,0,'none'),null);});
+test('supports JSONL and BOM',()=>{assert.equal(parsePages('\uFEFF'+rows.map(r=>JSON.stringify(r)).join('\n')).length,3);});
+test('rejects same-answer paired goals',()=>{const bad=structuredClone(rows);bad[0].correct_action_indices=[0,0];assert.throws(()=>parsePages(JSON.stringify(bad)),/opposite/);});
+test('rejects empty and malformed files',()=>{assert.throws(()=>parsePages(''),/empty/);assert.throws(()=>parsePages('{bad}'),/Invalid JSON/);});
+test('rejects duplicate ids',()=>{assert.throws(()=>parsePages(JSON.stringify([rows[0],rows[0]])),/duplicate/);});
+test('rejects annotation-only data rather than inventing page evidence',()=>{const bad=structuredClone(rows);delete bad[0].observation;assert.throws(()=>parsePages(JSON.stringify(bad)),/joined/);});
+test('action binding is validated',()=>{const bad=structuredClone(rows);bad[0].notes[0].action_index=1;assert.throws(()=>parsePages(JSON.stringify(bad)),/action-bound/);});
+test('reads local files and rejects excessive sizes',async()=>{const file=new File([source],'pages.json');assert.equal((await readLocalFile(file)).length,3);await assert.rejects(()=>readLocalFile({size:51*1024*1024}),/size limit/);});
+test('reads local gzip without a server',async()=>{const blob=new Blob([source]);const zipped=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();const file=new File([zipped],'pages.jsonl.gz');assert.equal((await readLocalFile(file)).length,3);});
+test('untrusted markup remains data, not transformed into DOM',()=>{const bad=structuredClone(rows);bad[0].observation='<script>fetch("https://invalid.example")</script>';assert.equal(parsePages(JSON.stringify(bad))[0].observation,bad[0].observation);});
